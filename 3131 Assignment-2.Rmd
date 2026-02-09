@@ -1,0 +1,651 @@
+---
+title: "3131 Assignment"
+output: pdf_document
+date: "2025-10-19"
+---
+
+## Setup
+
+```{r setup}
+
+library(dplyr)
+library(stringr)
+library(car)
+
+data = read.csv('hdb-resale-Jan-Jun2021.csv')
+head(data)
+dim(data)
+any(is.na(data))
+colnames(data)
+
+data$town <- as.factor(data$town) # group into regions
+levels(data$town)
+data$flat_type <- as.factor(data$flat_type)
+levels(data$flat_type)
+data$street_name <- as.factor(data$street_name)
+data$storey_range <- as.factor(data$storey_range)
+levels(data$storey_range)
+data$flat_model <- as.factor(data$flat_model)
+levels(data$flat_model)
+```
+
+## EDA: Exploring the variables and association
+
+```{r EDA - response variable}
+
+# --- Numeric summary ---
+cat("Summary of resale_price:\n")
+print(summary(data$resale_price))
+
+# Calculate descriptive statistics
+mean_val   <- mean(data$resale_price, na.rm = TRUE)
+sd_val     <- sd(data$resale_price, na.rm = TRUE)
+min_val    <- min(data$resale_price, na.rm = TRUE)
+q1_val     <- quantile(data$resale_price, 0.25, na.rm = TRUE)
+median_val <- median(data$resale_price, na.rm = TRUE)
+q3_val     <- quantile(data$resale_price, 0.75, na.rm = TRUE)
+max_val    <- max(data$resale_price, na.rm = TRUE)
+n_out      <- length(boxplot(data$resale_price, plot = FALSE)$out)
+
+# Print numeric results
+cat("\n--- Descriptive Statistics ---\n")
+cat("Mean: ", round(mean_val, 2), "\n")
+cat("Standard Deviation: ", round(sd_val, 2), "\n")
+cat("Min: ", round(min_val, 0), "\n")
+cat("Q1: ", round(q1_val, 0), "\n")
+cat("Median: ", round(median_val, 0), "\n")
+cat("Q3: ", round(q3_val, 0), "\n")
+cat("Max: ", round(max_val, 0), "\n")
+cat("Number of Outliers: ", n_out, "\n")
+
+# --- Base R Plots (no colors) ---
+
+# Histogram of resale prices
+hist(data$resale_price,
+     main = "Distribution of Resale Prices",
+     xlab = "Resale Price (SGD)",
+     breaks = 30)
+
+# QQ plot for resale prices
+qqnorm(data$resale_price, main = "QQ Plot of Resale Prices")
+qqline(data$resale_price, col='red', lwd = 2)
+
+# Histogram of log-transformed prices
+hist(log(data$resale_price),
+     main = "Distribution of Log Resale Prices",
+     xlab = "Log Resale Price",
+     breaks = 30)
+
+# QQ plot for log-transformed prices
+qqnorm(log(data$resale_price), main = "QQ Plot of Log Resale Prices")
+qqline(log(data$resale_price), lwd = 2)
+
+# Boxplot of resale prices
+bp <- boxplot(data$resale_price,
+              main = "Boxplot of Resale Prices",
+              ylab = "Resale Price (SGD)")
+
+# Add five-number summary labels, spaced for clarity
+stats <- as.numeric(bp$stats)
+names <- c("Min", "Q1", "Median", "Q3", "Max")
+
+# Adjust x position and text spacing for readability
+text(x = 1.2,
+     y = stats,
+     labels = paste0(names, ": ", format(round(stats, 0), big.mark = ",")),
+     pos = 4,
+     cex = 0.8)
+```
+
+```{r EDA - Categorical Variables}
+
+data <- data %>%
+  mutate(town = case_when(
+    town %in% c("BISHAN", "TOA PAYOH", "KALLANG/WHAMPOA", "CENTRAL AREA", 
+                "QUEENSTOWN", "BUKIT TIMAH", "MARINE PARADE", "BUKIT MERAH", "GEYLANG") ~ "Central",
+    town %in% c("BEDOK", "TAMPINES", "PASIR RIS") ~ "East",
+    town %in% c("WOODLANDS", "YISHUN", "SEMBAWANG") ~ "North",
+    town %in% c("ANG MO KIO", "HOUGANG", "PUNGGOL", "SENGKANG", "SERANGOON") ~ "North-East",
+    town %in% c("BUKIT BATOK", "BUKIT PANJANG", "CLEMENTI", "JURONG EAST", 
+                "JURONG WEST", "CHOA CHU KANG") ~ "West",
+  ))
+data$town <- factor(data$town, levels = c("Central", "East", "North", "North-East", "West"))
+unique(data$town)
+
+data <- data[, !(names(data) %in% c("street_name", "block", "flat_model"))]
+
+# Boxplot: Log Resale Price by Month
+boxplot(log(data$resale_price) ~ data$month,
+        main = "Log(Resale Price) by Month of Sale",
+        xlab = "Month (2021)",
+        ylab = "Log(Resale Price)")
+
+# Boxplot: Log Resale Price by Town
+boxplot(log(data$resale_price) ~ data$town,
+        main = "Log(Resale Price) by Town",
+        xlab = "Town",
+        ylab = "Log(Resale Price)")
+
+# Boxplot: Log Resale Price by Flat Type
+boxplot(log(data$resale_price) ~ data$flat_type,
+        main = "Log(Resale Price) by Flat Type",
+        xlab = "Flat type",
+        ylab = "Log(Resale Price)",
+        )
+```
+
+```{r EDA - Quantitative Variables}
+
+# Convert Remaining Lease to numeric (months)
+
+data <- data %>%
+  mutate(
+    years = as.numeric(str_extract(remaining_lease, "\\d+(?=\\s*years?)")),
+    months = as.numeric(str_extract(remaining_lease, "\\d+(?=\\s*month)")),
+    months = ifelse(is.na(months), 0, months),
+    remaining_lease_months = years * 12 + months
+  )
+
+# Convert Storey Range to numerical midpoint (e.g., "01 TO 03" → 2)
+data$storey_range <- sapply(strsplit(as.character(data$storey_range), " TO "), function(x) {
+  low  <- as.numeric(x[1])
+  high <- as.numeric(x[2])
+  mean(c(low, high))
+})
+
+# --- Scatterplots with log resale price ---
+
+# 1. Floor Area (sqm)
+plot(data$floor_area_sqm, log(data$resale_price),
+     pch = 20,
+     main = "Log(Resale Price) vs Floor Area (sqm)",
+     xlab = "Floor Area (sqm)",
+     ylab = "Log(Resale Price)")
+cat("Correlation (Log Resale Price ~ Floor Area): ",
+    round(cor(log(data$resale_price), data$floor_area_sqm, use = "complete.obs"), 4), "\n")
+
+# 2. Lease Commencement Date
+plot(data$lease_commence_date, log(data$resale_price),
+     pch = 20,
+     main = "Log(Resale Price) vs Lease Commencement Year",
+     xlab = "Lease Commencement Year",
+     ylab = "Log(Resale Price)")
+cat("Correlation (Log Resale Price ~ Lease Commencement Year): ",
+    round(cor(log(data$resale_price), data$lease_commence_date, use = "complete.obs"), 4), "\n")
+
+# 3. Remaining Lease (months)
+plot(data$remaining_lease_months, log(data$resale_price),
+     pch = 20,
+     main = "Log(Resale Price) vs Remaining Lease (months)",
+     xlab = "Remaining Lease (months)",
+     ylab = "Log(Resale Price)")
+cat("Correlation (Log Resale Price ~ Remaining Lease): ",
+    round(cor(log(data$resale_price), data$remaining_lease_months, use = "complete.obs"), 4), "\n")
+
+# 4. Storey Range
+plot(data$storey_range, log(data$resale_price),
+     pch = 20,
+     main = "Log(Resale Price) vs Storey Range",
+     xlab = "Storey Range",
+     ylab = "Log(Resale Price)")
+cat("Correlation (Log Resale Price ~ Storey Midpoint): ",
+    round(cor(log(data$resale_price), data$storey_range, use = "complete.obs"), 4), "\n")
+
+data <- data[, !(names(data) %in% c("remaining_lease_months", "remaining_lease"))]
+```
+
+```{r M0}
+
+M0 = lm(log(resale_price) ~ month + town + flat_type + storey_range + floor_area_sqm + lease_commence_date, data=data)
+summary(M0)
+anova(M0)
+```
+
+```{r M0_plots}
+
+# Standardized residuals
+sr <- rstandard(M0)
+fitted_vals <- fitted(M0)
+
+# QQ plot
+qqnorm(sr, main = "QQ Plot of Standardized Residuals", ylab = "Standardized Residuals")
+qqline(sr, col = "red")
+
+# Residuals vs Fitted
+plot(fitted_vals, sr,
+     main = "Standardized Residuals vs Fitted Values",
+     xlab = "Fitted Values",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs numeric predictors
+plot(data$floor_area_sqm, sr,
+     main = "Standardized Residuals vs Floor Area (sqm)",
+     xlab = "Floor Area (sqm)",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$lease_commence_date, sr,
+     main = "Standardized Residuals vs Lease Commencement Date",
+     xlab = "Lease Commencement Date",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$storey_range, sr,
+     main = "Standardized Residuals vs Storey Range",
+     xlab = "Storey Range",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs categorical variables using boxplots
+boxplot(sr ~ data$month,
+        main = "Standardized Residuals by Month",
+        xlab = "Month",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$town,
+        main = "Standardized Residuals by Town",
+        xlab = "Town",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$flat_type,
+        main = "Standardized Residuals by Flat Type",
+        xlab = "Flat Type",
+        ylab = "Standardized Residuals")
+
+# Overall boxplot to check outliers
+boxplot(sr, main = "Overall Standardized Residuals", ylab = "Standardized Residuals")
+
+length(boxplot(sr, plot = FALSE)$out)
+
+# Check for influential points
+which(cooks.distance(M0) >= 1) # indices of influential points
+
+# Calculate VIF (Variance Inflation Factor) for each predictor
+vif_values <- vif(M0)
+print(vif_values)
+```
+
+```{r M1}
+
+data <- data %>%
+  mutate(flat_type_grouped = case_when(
+    flat_type %in% c("1 ROOM", "2 ROOM") ~ "Small",
+    flat_type %in% c("3 ROOM", "4 ROOM") ~ "Medium",
+    flat_type %in% c("5 ROOM", "EXECUTIVE", "MULTI-GENERATION") ~ "Large",
+    TRUE ~ "Other"
+  ))
+
+M1 = lm(log(resale_price) ~ floor_area_sqm + lease_commence_date + town + storey_range + flat_type_grouped, data=data)
+summary(M1)
+anova(M1)
+```
+
+```{r M1_plots}
+
+# Standardized residuals
+sr <- rstandard(M1)
+fitted_vals <- fitted(M1)
+
+# QQ plot
+qqnorm(sr, main = "QQ Plot of Standardized Residuals", ylab = "Standardized Residuals")
+qqline(sr, col = "red")
+
+# Residuals vs Fitted
+plot(fitted_vals, sr,
+     main = "Standardized Residuals vs Fitted Values",
+     xlab = "Fitted Values",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs numeric predictors
+plot(data$floor_area_sqm, sr,
+     main = "Standardized Residuals vs Floor Area (sqm)",
+     xlab = "Floor Area (sqm)",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$lease_commence_date, sr,
+     main = "Standardized Residuals vs Lease Commencement Date",
+     xlab = "Lease Commencement Date",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$storey_range, sr,
+     main = "Standardized Residuals vs Storey Range",
+     xlab = "Storey Range",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs categorical variables using boxplots
+boxplot(sr ~ data$month,
+        main = "Standardized Residuals by Month",
+        xlab = "Month",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$town,
+        main = "Standardized Residuals by Town",
+        xlab = "Town",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$flat_type_grouped,
+        main = "Standardized Residuals by Flat Type",
+        xlab = "Flat Type",
+        ylab = "Standardized Residuals")
+
+# Overall boxplot to check outliers
+boxplot(sr, main = "Overall Standardized Residuals", ylab = "Standardized Residuals")
+
+length(boxplot(sr, plot = FALSE)$out)
+
+# Check for influential points
+which(cooks.distance(M1) >= 1) # indices of influential points
+
+# Calculate VIF (Variance Inflation Factor) for each predictor
+vif_values <- vif(M1)
+print(vif_values)
+```
+
+```{r M2}
+
+# Regroup into Large and Small-Medium
+data <- data %>%
+  mutate(flat_type_grouped = case_when(
+    flat_type %in% c("1 ROOM", "2 ROOM", "3 ROOM", "4 ROOM") ~ "Small-Medium",
+    flat_type %in% c("5 ROOM", "EXECUTIVE", "MULTI-GENERATION") ~"Large",
+    TRUE ~ "Other"
+  ))
+
+# Fit the model
+M2 <- lm(log(resale_price) ~ floor_area_sqm + lease_commence_date + town + storey_range + flat_type_grouped, data=data)
+
+# Check summary and ANOVA
+summary(M2)
+anova(M2)
+```
+
+```{r M2_plots}
+
+# Standardized residuals
+sr <- rstandard(M2)
+fitted_vals <- fitted(M2)
+
+# QQ plot
+qqnorm(sr, main = "QQ Plot of Standardized Residuals", ylab = "Standardized Residuals")
+qqline(sr, col = "red")
+
+# Residuals vs Fitted
+plot(fitted_vals, sr,
+     main = "Standardized Residuals vs Fitted Values",
+     xlab = "Fitted Values",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs numeric predictors
+plot(data$floor_area_sqm, sr,
+     main = "Standardized Residuals vs Floor Area (sqm)",
+     xlab = "Floor Area (sqm)",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$lease_commence_date, sr,
+     main = "Standardized Residuals vs Lease Commencement Date",
+     xlab = "Lease Commencement Date",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$storey_range, sr,
+     main = "Standardized Residuals vs Storey Range",
+     xlab = "Storey Range",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs categorical variables using boxplots
+boxplot(sr ~ data$month,
+        main = "Standardized Residuals by Month",
+        xlab = "Month",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$town,
+        main = "Standardized Residuals by Town",
+        xlab = "Town",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$flat_type_grouped,
+        main = "Standardized Residuals by Flat Type",
+        xlab = "Flat Type",
+        ylab = "Standardized Residuals")
+
+# Overall boxplot to check outliers
+boxplot(sr, main = "Overall Standardized Residuals", ylab = "Standardized Residuals")
+
+length(boxplot(sr, plot = FALSE)$out)
+
+# Check for influential points
+which(cooks.distance(M2) >= 1) # indices of influential points
+
+# Calculate VIF (Variance Inflation Factor) for each predictor
+vif_values <- vif(M2)
+print(vif_values)
+```
+
+```{r M3}
+# Fit the model
+M3 <- lm(log(resale_price) ~ floor_area_sqm + lease_commence_date + town + I(storey_range^1.34) + flat_type_grouped, data=data)
+
+# Check summary and ANOVA
+summary(M3)
+anova(M3)
+```
+
+```{r M3_plots}
+
+# Standardized residuals
+sr <- rstandard(M3)
+fitted_vals <- fitted(M3)
+
+# QQ plot
+qqnorm(sr, main = "QQ Plot of Standardized Residuals", ylab = "Standardized Residuals")
+qqline(sr, col = "red")
+
+# Residuals vs Fitted
+plot(fitted_vals, sr,
+     main = "Standardized Residuals vs Fitted Values",
+     xlab = "Fitted Values",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs numeric predictors
+plot(data$floor_area_sqm, sr,
+     main = "Standardized Residuals vs Floor Area (sqm)",
+     xlab = "Floor Area (sqm)",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$lease_commence_date, sr,
+     main = "Standardized Residuals vs Lease Commencement Date",
+     xlab = "Lease Commencement Date",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$storey_range, sr,
+     main = "Standardized Residuals vs Storey Range",
+     xlab = "Storey Range",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs categorical variables using boxplots
+boxplot(sr ~ data$month,
+        main = "Standardized Residuals by Month",
+        xlab = "Month",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$town,
+        main = "Standardized Residuals by Town",
+        xlab = "Town",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$flat_type_grouped,
+        main = "Standardized Residuals by Flat Type",
+        xlab = "Flat Type",
+        ylab = "Standardized Residuals")
+
+# Overall boxplot to check outliers
+boxplot(sr, main = "Overall Standardized Residuals", ylab = "Standardized Residuals")
+
+length(boxplot(sr, plot = FALSE)$out)
+
+# Check for influential points
+which(cooks.distance(M3) >= 1) # indices of influential points
+
+# Calculate VIF (Variance Inflation Factor) for each predictor
+vif_values <- vif(M3)
+print(vif_values)
+```
+
+```{r M4}
+
+data <- data %>%
+  mutate(storey_grouped = case_when(
+    storey_range <= 5 ~ "Low",
+    storey_range <= 11 ~ "Mid",
+    storey_range <=20 ~ "High",
+    storey_range >20 ~ "Very High",
+  ))
+
+data$storey_grouped <- factor(data$storey_grouped, levels = c("Low", "Mid", "High", "Very High"))
+
+# Re-run regression
+M4 <- lm(log(resale_price) ~ floor_area_sqm + lease_commence_date + town + flat_type_grouped + storey_grouped, data=data)
+summary(M4)
+anova(M4)
+```
+
+```{r M4_plots}
+
+# Standardized residuals
+sr <- rstandard(M4)
+fitted_vals <- fitted(M4)
+
+# QQ plot
+qqnorm(sr, main = "QQ Plot of Standardized Residuals", ylab = "Standardized Residuals")
+qqline(sr, col = "red")
+
+# Residuals vs Fitted
+plot(fitted_vals, sr,
+     main = "Standardized Residuals vs Fitted Values",
+     xlab = "Fitted Values",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs numeric predictors
+plot(data$floor_area_sqm, sr,
+     main = "Standardized Residuals vs Floor Area (sqm)",
+     xlab = "Floor Area (sqm)",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$lease_commence_date, sr,
+     main = "Standardized Residuals vs Lease Commencement Date",
+     xlab = "Lease Commencement Date",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs categorical variables using boxplots
+boxplot(sr ~ data$month,
+        main = "Standardized Residuals by Month",
+        xlab = "Month",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$town,
+        main = "Standardized Residuals by Town",
+        xlab = "Town",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$flat_type_grouped,
+        main = "Standardized Residuals by Flat Type",
+        xlab = "Flat Type",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$storey_grouped,
+        main = "Standardized Residuals by Storey Grouped",
+        xlab = "Storey Grouped",
+        ylab = "Standardized Residuals")
+
+# Overall boxplot to check outliers
+boxplot(sr, main = "Overall Standardized Residuals", ylab = "Standardized Residuals")
+
+length(boxplot(sr, plot = FALSE)$out)
+
+# Check for influential points
+which(cooks.distance(M4) >= 1) # indices of influential points
+
+# Calculate VIF (Variance Inflation Factor) for each predictor
+vif_values <- vif(M4)
+print(vif_values)
+```
+
+```{r}
+
+M5 <- lm(log(resale_price) ~ log(floor_area_sqm) + lease_commence_date + town + flat_type_grouped + storey_grouped, data=data)
+summary(M5)
+anova(M5)
+```
+
+```{r M5_plots}
+
+# Standardized residuals
+sr <- rstandard(M5)
+fitted_vals <- fitted(M5)
+
+# QQ plot
+qqnorm(sr, main = "QQ Plot of Standardized Residuals", ylab = "Standardized Residuals")
+qqline(sr, col = "red")
+
+# Residuals vs Fitted
+plot(fitted_vals, sr,
+     main = "Standardized Residuals vs Fitted Values",
+     xlab = "Fitted Values",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+# Residuals vs numeric predictors
+plot(log(data$floor_area_sqm), sr,
+     main = "Standardized Residuals vs Floor Area (sqm)",
+     xlab = "Floor Area (sqm)",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+plot(data$lease_commence_date, sr,
+     main = "Standardized Residuals vs Lease Commencement Date",
+     xlab = "Lease Commencement Date",
+     ylab = "Standardized Residuals")
+abline(h = 0, col = "red")
+
+boxplot(sr ~ data$town,
+        main = "Standardized Residuals by Town",
+        xlab = "Town",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$flat_type_grouped,
+        main = "Standardized Residuals by Flat Type",
+        xlab = "Flat Type",
+        ylab = "Standardized Residuals")
+
+boxplot(sr ~ data$storey_grouped,
+        main = "Standardized Residuals by Storey Grouped",
+        xlab = "Storey Grouped",
+        ylab = "Standardized Residuals")
+
+# Overall boxplot to check outliers
+boxplot(sr, main = "Overall Standardized Residuals", ylab = "Standardized Residuals")
+
+length(boxplot(sr, plot = FALSE)$out)
+
+# Check for influential points
+which(cooks.distance(M5) >= 1) # indices of influential points
+
+# Calculate VIF (Variance Inflation Factor) for each predictor
+vif_values <- vif(M5)
+print(vif_values)
+```
