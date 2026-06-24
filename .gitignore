@@ -1,0 +1,25 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+.Renviron
+
+# R Markdown / knitr cache and output
+*_cache/
+*_files/
+*.knit.md
+*.utf8.md
+
+# Data files (download from data.gov.sg)
+*.csv
+*.xlsx
+*.xls
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

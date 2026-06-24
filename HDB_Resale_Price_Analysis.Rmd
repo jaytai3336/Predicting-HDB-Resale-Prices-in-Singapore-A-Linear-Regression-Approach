@@ -1,5 +1,5 @@
 ---
-title: "3131 Assignment"
+title: "Predicting HDB Resale Prices in Singapore: A Linear Regression Approach"
 output: pdf_document
 date: "2025-10-19"
 ---
