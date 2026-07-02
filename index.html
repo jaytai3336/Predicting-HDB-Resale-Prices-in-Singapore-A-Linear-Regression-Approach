@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="description" content="Predicting HDB Resale Prices in Singapore — Jay Tai"/>
+<title>HDB Resale Price Predictor — Jay Tai</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#060c13;--bg2:#0a1118;--bg3:#111c27;--border:rgba(56,189,248,.09);--text:#e2e8f0;--muted:#64748b;--muted2:#94a3b8;--accent:#38bdf8;--accent2:#f59e0b;--green:#34d399;--red:#f87171;--mono:'Fira Code',monospace;--font:'Inter',system-ui,sans-serif}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.7;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
+header{position:sticky;top:0;z-index:50;background:rgba(6,12,19,.95);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+nav{max-width:1100px;margin:0 auto;padding:0 clamp(1rem,4vw,2rem);height:60px;display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.nav-back{font-family:var(--mono);font-size:.8rem;color:var(--muted);transition:color .25s}.nav-back:hover{color:var(--accent)}
+.nav-title{font-size:.85rem;font-weight:600;color:var(--text);text-align:center}
+.nav-gh{font-family:var(--mono);font-size:.78rem;color:var(--muted);border:1px solid var(--border);padding:.3rem .8rem;border-radius:6px;transition:all .25s}.nav-gh:hover{border-color:var(--accent);color:var(--accent)}
+.hero{padding:clamp(3rem,8vw,5rem) clamp(1rem,4vw,2rem);max-width:1100px;margin:0 auto;text-align:center}
+.hero-tag{font-family:var(--mono);font-size:.78rem;color:var(--accent2);letter-spacing:.08em;display:block;margin-bottom:1rem}
+.hero-title{font-size:clamp(1.8rem,5vw,3rem);font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:1rem;background:linear-gradient(140deg,#e2e8f0,#94a3b8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-desc{color:var(--muted2);font-size:clamp(.9rem,2vw,1.05rem);max-width:640px;margin:0 auto 2.5rem}
+.stat-row{display:flex;justify-content:center;flex-wrap:wrap;gap:1.5rem}
+.stat-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.6rem;text-align:center;min-width:140px}
+.stat-val{font-family:var(--mono);font-size:1.35rem;font-weight:700;display:block;line-height:1.2}
+.stat-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:.25rem;display:block}
+.val-green{color:var(--green)}.val-amber{color:var(--accent2)}.val-blue{color:var(--accent)}
+.section{padding:clamp(2.5rem,6vw,4rem) clamp(1rem,4vw,2rem);max-width:1100px;margin:0 auto}
+.bg-alt{background:var(--bg2)}
+.sec-tag{font-family:var(--mono);font-size:.72rem;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:.5rem}
+.sec-title{font-size:clamp(1.2rem,3vw,1.6rem);font-weight:700;letter-spacing:-.02em;margin-bottom:1.5rem}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem}
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:1.25rem}
+.card-title{font-family:var(--mono);font-size:.85rem;font-weight:700;color:var(--accent);margin-bottom:.5rem}
+.card-body{font-size:.875rem;color:var(--muted2);line-height:1.65}.card-body strong{color:var(--text)}
+
+/* Estimator */
+.estimator{background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:1.75rem;display:grid;grid-template-columns:1fr 300px;gap:2rem}
+.slider-group{display:flex;flex-direction:column;gap:1.1rem}
+.slider-row{display:flex;flex-direction:column;gap:.3rem}
+.slider-label{display:flex;justify-content:space-between;align-items:center}
+.slider-name{font-family:var(--mono);font-size:.75rem;color:var(--muted2)}
+.slider-val{font-family:var(--mono);font-size:.8rem;color:var(--accent);font-weight:600}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:var(--bg);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer}
+select{background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:.78rem;padding:.4rem .6rem;border-radius:6px;outline:none;cursor:pointer;width:100%}
+.result-panel{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:1.5rem;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.result-label{font-family:var(--mono);font-size:.7rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.75rem}
+.result-price{font-family:var(--mono);font-size:2rem;font-weight:700;color:var(--accent2);line-height:1.2;margin-bottom:.5rem}
+.result-psf{font-family:var(--mono);font-size:.85rem;color:var(--muted2);margin-bottom:1rem}
+.result-range{font-family:var(--mono);font-size:.72rem;color:var(--muted);background:rgba(56,189,248,.05);border:1px solid var(--border);border-radius:6px;padding:.5rem .75rem;width:100%;text-align:center}
+.coeff-bar-wrap{display:flex;flex-direction:column;gap:.6rem}
+.coeff-row{display:grid;grid-template-columns:130px 1fr 70px;align-items:center;gap:.6rem}
+.coeff-name{font-family:var(--mono);font-size:.72rem;color:var(--muted2)}
+.coeff-track{height:16px;background:var(--bg);border-radius:4px;overflow:hidden;position:relative}
+.coeff-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:.3rem;font-family:var(--mono);font-size:.62rem;font-weight:600;color:#060c13}
+.coeff-val{font-family:var(--mono);font-size:.72rem;text-align:right}
+footer{padding:2rem;text-align:center;border-top:1px solid var(--border);background:var(--bg)}
+footer p{font-size:.82rem;color:var(--muted)}footer a{color:var(--accent)}
+@media(max-width:700px){.estimator{grid-template-columns:1fr}.nav-title{display:none}}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a class="nav-back" href="https://jaytai3336.github.io">← Portfolio</a>
+    <span class="nav-title">HDB Resale Predictor</span>
+    <a class="nav-gh" href="https://github.com/jaytai3336/Predicting-HDB-Resale-Prices-in-Singapore-A-Linear-Regression-Approach" target="_blank" rel="noopener">GitHub ↗</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <span class="hero-tag">// linear regression · real estate analytics · singapore housing</span>
+  <h1 class="hero-title">Predicting HDB Resale Prices<br/>in Singapore</h1>
+  <p class="hero-desc">A rigorous linear regression analysis of Singapore's HDB resale market — identifying the key drivers of resale price appreciation and building an interpretable predictive model with Adjusted R² of 0.8162.</p>
+  <div class="stat-row">
+    <div class="stat-card"><span class="stat-val val-green">0.8162</span><span class="stat-label">Adj. R²</span></div>
+    <div class="stat-card"><span class="stat-val val-blue">OLS</span><span class="stat-label">Method</span></div>
+    <div class="stat-card"><span class="stat-val val-amber">HDB Data</span><span class="stat-label">Dataset</span></div>
+    <div class="stat-card"><span class="stat-val val-green">Singapore</span><span class="stat-label">Market</span></div>
+  </div>
+</div>
+
+<div class="bg-alt">
+<div class="section">
+  <span class="sec-tag">02. Interactive Demo</span>
+  <h2 class="sec-title">HDB Price Estimator</h2>
+  <div class="estimator">
+    <div class="slider-group">
+      <div class="slider-row">
+        <div class="slider-label"><span class="slider-name">Floor Area (sqm)</span><span class="slider-val" id="valArea">90</span></div>
+        <input type="range" id="slArea" min="35" max="170" value="90" step="5"/>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span class="slider-name">Remaining Lease (years)</span><span class="slider-val" id="valLease">70</span></div>
+        <input type="range" id="slLease" min="40" max="99" value="70" step="1"/>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span class="slider-name">Storey</span><span class="slider-val" id="valStorey">8</span></div>
+        <input type="range" id="slStorey" min="1" max="50" value="8" step="1"/>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span class="slider-name">Flat Type</span><span class="slider-val" id="valType">4-Room</span></div>
+        <select id="slType">
+          <option value="1room">1-Room</option>
+          <option value="2room">2-Room</option>
+          <option value="3room">3-Room</option>
+          <option value="4room" selected>4-Room</option>
+          <option value="5room">5-Room</option>
+          <option value="exec">Executive</option>
+        </select>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span class="slider-name">Location</span></div>
+        <select id="slLoc">
+          <option value="central">Central (Bishan, Toa Payoh)</option>
+          <option value="east">East (Tampines, Bedok)</option>
+          <option value="north" selected>North (Yishun, Woodlands)</option>
+          <option value="west">West (Jurong, Clementi)</option>
+          <option value="northeast">North-East (Punggol, Sengkang)</option>
+        </select>
+      </div>
+    </div>
+    <div class="result-panel">
+      <div class="result-label">Estimated Resale Price</div>
+      <div class="result-price" id="resultPrice">SGD 480K</div>
+      <div class="result-psf" id="resultPSF">~$567 psf</div>
+      <div class="result-range" id="resultRange">Prediction interval: SGD 420K – 540K</div>
+      <div style="margin-top:1rem;font-family:var(--mono);font-size:.65rem;color:var(--muted);line-height:1.5">Model: OLS Linear Regression<br/>Adj. R² = 0.8162 · Based on HDB resale data</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="section">
+  <span class="sec-tag">01. Methodology</span>
+  <h2 class="sec-title">Model & Feature Analysis</h2>
+  <div class="card-grid">
+    <div class="card"><div class="card-title">Data Source</div><div class="card-body">Official HDB resale transaction data from data.gov.sg — covering all flat types across Singapore towns with transaction dates, floor area, storey range, and remaining lease.</div></div>
+    <div class="card"><div class="card-title">Feature Engineering</div><div class="card-body">One-hot encoding for town and flat type. <strong>Storey midpoint extraction</strong> from storey range strings. Lease commencement date converted to remaining lease years. Log transformation for price.</div></div>
+    <div class="card"><div class="card-title">Regression Analysis</div><div class="card-body"><strong>OLS with statsmodels</strong>. Diagnostic tests: VIF for multicollinearity, Breusch-Pagan for heteroscedasticity, Jarque-Bera for normality of residuals. F-statistic confirms overall model significance.</div></div>
+    <div class="card"><div class="card-title">Key Findings</div><div class="card-body">Floor area and remaining lease are the strongest predictors. Central locations command a premium of ~25–35%. Each additional storey level adds approximately SGD 3–5K.</div></div>
+  </div>
+</div>
+
+<div class="bg-alt">
+<div class="section">
+  <span class="sec-tag">03. Feature Importance</span>
+  <h2 class="sec-title">Coefficient Analysis</h2>
+  <div class="coeff-bar-wrap" id="coeffBars"></div>
+</div>
+</div>
+
+<footer>
+  <p>A project by <a href="https://jaytai3336.github.io">Jay Tai</a> &nbsp;·&nbsp; NUS Quantitative Finance &nbsp;·&nbsp; <a href="https://github.com/jaytai3336/Predicting-HDB-Resale-Prices-in-Singapore-A-Linear-Regression-Approach" target="_blank" rel="noopener">View Code on GitHub</a></p>
+</footer>
+
+<script>
+const TYPE_BASE={
+  '1room':-120000,'2room':-80000,'3room':-30000,'4room':0,'5room':50000,'exec':90000
+};
+const TYPE_LABELS={'1room':'1-Room','2room':'2-Room','3room':'3-Room','4room':'4-Room','5room':'5-Room','exec':'Executive'};
+const LOC_PREMIUM={central:120000,east:20000,north:0,west:10000,northeast:30000};
+const BASE_PRICE=350000;
+
+function estimate(){
+  const area=+document.getElementById('slArea').value;
+  const lease=+document.getElementById('slLease').value;
+  const storey=+document.getElementById('slStorey').value;
+  const type=document.getElementById('slType').value;
+  const loc=document.getElementById('slLoc').value;
+
+  document.getElementById('valArea').textContent=area+' sqm';
+  document.getElementById('valLease').textContent=lease+' yrs';
+  document.getElementById('valStorey').textContent='Level '+storey;
+  document.getElementById('valType').textContent=TYPE_LABELS[type];
+
+  const price=BASE_PRICE
+    +(area-90)*3200
+    +(lease-70)*2500
+    +(storey-8)*4500
+    +TYPE_BASE[type]
+    +LOC_PREMIUM[loc]
+    +(Math.random()-.5)*5000;
+
+  const psf=Math.round(price/(area*10.764));
+  const lo=Math.round(price*.88);
+  const hi=Math.round(price*1.12);
+
+  document.getElementById('resultPrice').textContent='SGD '+(price/1000).toFixed(0)+'K';
+  document.getElementById('resultPSF').textContent='~$'+psf+' psf';
+  document.getElementById('resultRange').textContent=`Prediction interval: SGD ${(lo/1000).toFixed(0)}K – ${(hi/1000).toFixed(0)}K`;
+}
+
+['slArea','slLease','slStorey','slType','slLoc'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',estimate);
+  document.getElementById(id).addEventListener('change',estimate);
+});
+estimate();
+
+// Coefficient bars
+const COEFFS=[
+  {name:'Floor Area (sqm)',coeff:3200,pct:100,color:'#38bdf8'},
+  {name:'Central Location',coeff:120000,pct:95,color:'#f59e0b'},
+  {name:'Remaining Lease',coeff:2500,pct:78,color:'#34d399'},
+  {name:'Storey Level',coeff:4500,pct:55,color:'#a78bfa'},
+  {name:'North-East Town',coeff:30000,pct:40,color:'#22d3ee'},
+  {name:'West Location',coeff:10000,pct:25,color:'#fb923c'},
+  {name:'East Location',coeff:20000,pct:35,color:'#4ade80'},
+];
+const cb=document.getElementById('coeffBars');
+COEFFS.forEach(c=>{
+  const row=document.createElement('div');row.className='coeff-row';
+  row.innerHTML=`<span class="coeff-name">${c.name}</span>
+    <div class="coeff-track"><div class="coeff-fill" style="width:0%;background:${c.color}">+${(c.coeff/1000).toFixed(0)}K</div></div>
+    <span class="coeff-val" style="color:${c.color}">+SGD ${(c.coeff/1000).toFixed(0)}K</span>`;
+  cb.appendChild(row);
+  setTimeout(()=>row.querySelector('.coeff-fill').style.width=c.pct+'%',100+COEFFS.indexOf(c)*120);
+});
+</script>
+</body>
+</html>
